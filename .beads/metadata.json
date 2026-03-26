@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "server",
+  "dolt_database": "ai_assistant",
+  "project_id": "73e250e7-67ab-4e13-8e6b-ad9df4cc0e59"
+}
