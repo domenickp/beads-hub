@@ -1,0 +1,22 @@
+services:
+  hub:
+    build: .
+    container_name: beads-hub
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      # Persistent data (survives container rebuilds)
+      - hub-data:/data
+      # Beads project directory (Dolt database)
+      - beads-project:/data/beads-project
+      # Secrets (age key for SOPS decryption)
+      - ./secrets:/secrets:ro
+    environment:
+      - NODE_ENV=production
+      - DB_PATH=/data/hub.db
+      - BEADS_PROJECT_DIR=/data/beads-project
+    restart: unless-stopped
+
+volumes:
+  hub-data:
+  beads-project:

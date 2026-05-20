@@ -1,0 +1,28 @@
+{
+  "name": "beads-agent-hub",
+  "version": "2.0.0",
+  "description": "Multi-agent personal assistant with Beads task tracking — self-hosted on Raspberry Pi or Windows",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"node server.js\" \"vite\"",
+    "build": "vite build",
+    "start": "NODE_ENV=production node server.js",
+    "setup-db": "node server.js --setup-only"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.0",
+    "express-session": "^1.18.1",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^5.4.11"
+  }
+}
