@@ -117,21 +117,25 @@ export const STAT_COLOR = { open: "#4d9bf0", in_progress: "#f0a030", closed: "#2
 
 /* ═══════════════════════════════════════════
    COST ESTIMATION — per million tokens (USD)
-   Update these when Anthropic changes pricing
+   Update these when Anthropic changes pricing.
+   Context windows are the default for each model; 1M-context variants
+   of Sonnet/Opus exist behind a beta header but the hub doesn't opt in.
    ═══════════════════════════════════════════ */
+export const DEFAULT_MODEL = "claude-sonnet-4-6";
+
 export const MODEL_PRICING = {
-  "claude-sonnet-4-20250514": { input: 3.0, output: 15.0, contextWindow: 200000 },
+  "claude-opus-4-7": { input: 15.0, output: 75.0, contextWindow: 200000 },
+  "claude-sonnet-4-6": { input: 3.0, output: 15.0, contextWindow: 200000 },
   "claude-haiku-4-5-20251001": { input: 0.80, output: 4.0, contextWindow: 200000 },
-  "claude-opus-4-20250514": { input: 15.0, output: 75.0, contextWindow: 200000 },
 };
 
 export function estimateCost(model, inputTokens, outputTokens) {
-  const pricing = MODEL_PRICING[model] || MODEL_PRICING["claude-sonnet-4-20250514"];
+  const pricing = MODEL_PRICING[model] || MODEL_PRICING[DEFAULT_MODEL];
   const inputCost = (inputTokens / 1_000_000) * pricing.input;
   const outputCost = (outputTokens / 1_000_000) * pricing.output;
   return { inputCost, outputCost, totalCost: inputCost + outputCost };
 }
 
 export function getContextWindow(model) {
-  return (MODEL_PRICING[model] || MODEL_PRICING["claude-sonnet-4-20250514"]).contextWindow;
+  return (MODEL_PRICING[model] || MODEL_PRICING[DEFAULT_MODEL]).contextWindow;
 }
