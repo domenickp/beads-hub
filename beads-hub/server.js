@@ -11,7 +11,7 @@ import dotenv from "dotenv";
 import { v4 as uuidv4 } from "uuid";
 import crypto from "crypto";
 import { googleTools, executeGoogleTool, agentHasGoogle, getConnectedAccounts, saveTokens as saveGoogleTokens } from "./src/google.js";
-import { AGENTS, DEFAULT_MODEL, estimateCost, getContextWindow } from "./src/agents.js";
+import { AGENTS, DEFAULT_MODEL, estimateCost, getContextWindow, resolveModelForAgent } from "./src/agents.js";
 
 dotenv.config();
 
@@ -337,7 +337,7 @@ app.post("/api/chat", requireAuth, async (req, res) => {
   // Agent-specific Google tools
   const googleEnabled = agentHasGoogle(agentId);
   const tools = googleEnabled ? googleTools : [];
-  const model = process.env.CLAUDE_MODEL || DEFAULT_MODEL;
+  const model = resolveModelForAgent(agentId, process.env.CLAUDE_MODEL);
 
   try {
     let messages = [...history];
@@ -451,7 +451,7 @@ app.post("/api/chat", requireAuth, async (req, res) => {
 app.get("/api/conversations/:agentId", requireAuth, (req, res) => {
   const rows = stmts.getConvo.all(req.session.userId, req.params.agentId);
   const convoTokens = stmts.getConvoTokens.get(req.session.userId, req.params.agentId);
-  const model = process.env.CLAUDE_MODEL || DEFAULT_MODEL;
+  const model = resolveModelForAgent(req.params.agentId, process.env.CLAUDE_MODEL);
   const contextWindow = getContextWindow(model);
   const totalTokens = (convoTokens.total_input || 0) + (convoTokens.total_output || 0);
   res.json({

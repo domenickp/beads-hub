@@ -6,6 +6,7 @@ export const AGENTS = [
     id: "bridge", name: "Bridge", role: "Cross-agent orchestrator",
     color: "#a78bfa", bgSolid: "rgba(167,139,250,0.15)",
     googleAccounts: ["personal", "georgetown"],
+    model: "claude-opus-4-7",
     desc: "On-demand coordinator. Morning briefings, multi-domain impact analysis, cross-cutting questions.",
     systemPrompt: `You are Bridge, an orchestration coordinator for a multi-agent personal assistant. You help the user when their question spans multiple domains. The user has five specialist agents:
 
@@ -138,4 +139,20 @@ export function estimateCost(model, inputTokens, outputTokens) {
 
 export function getContextWindow(model) {
   return (MODEL_PRICING[model] || MODEL_PRICING[DEFAULT_MODEL]).contextWindow;
+}
+
+/* ═══════════════════════════════════════════
+   PER-AGENT MODEL RESOLUTION
+   Precedence: agent's pinned `model` > CLAUDE_MODEL env > DEFAULT_MODEL.
+   Pinned models reflect design needs (e.g. Bridge needs Opus for
+   cross-domain reasoning) and shouldn't be silently overridden by a
+   global env default. To force a model on every agent, edit AGENTS.
+   ═══════════════════════════════════════════ */
+const AGENT_BY_ID = new Map(AGENTS.map(a => [a.id, a]));
+
+export function resolveModelForAgent(agentId, envModel) {
+  const agent = AGENT_BY_ID.get(agentId);
+  if (agent?.model) return agent.model;
+  if (envModel) return envModel;
+  return DEFAULT_MODEL;
 }
