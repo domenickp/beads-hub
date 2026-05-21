@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import session from "express-session";
 import cookieParser from "cookie-parser";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
@@ -11,7 +11,7 @@ import dotenv from "dotenv";
 import { v4 as uuidv4 } from "uuid";
 import crypto from "crypto";
 import { googleTools, executeGoogleTool, agentHasGoogle, getConnectedAccounts, saveTokens as saveGoogleTokens } from "./src/google.js";
-import { estimateCost, getContextWindow } from "./src/agents.js";
+import { AGENTS, estimateCost, getContextWindow } from "./src/agents.js";
 
 dotenv.config();
 
@@ -150,14 +150,18 @@ function requireAuth(req, res, next) {
 
 /* ═══════════════════════════════════════════
    BEADS CLI WRAPPER
+   Invokes `bd` with argv directly — no shell interpretation. Every
+   element of `args` is passed as a single literal argument to bd, so
+   shell metacharacters in user input or model output cannot escape.
    ═══════════════════════════════════════════ */
 function bd(args) {
+  if (!Array.isArray(args)) throw new TypeError("bd() expects an argv array");
   try {
-    const result = execSync(`bd ${args}`, {
+    const result = execFileSync("bd", args, {
       cwd: BEADS_DIR,
       encoding: "utf8",
       timeout: 15000,
-      env: { ...process.env, PATH: process.env.PATH },
+      shell: false,
     });
     try { return { ok: true, data: JSON.parse(result) }; }
     catch { return { ok: true, data: result.trim() }; }
@@ -166,10 +170,23 @@ function bd(args) {
   }
 }
 
+/* ── Input validators for values that reach the bd CLI ── */
+const BEAD_ID_RE = /^[A-Za-z0-9_-]+$/;
+const LABEL_RE = /^[A-Za-z0-9._,-]+$/;
+const STATUS_VALUES = new Set(["open", "in_progress", "closed", "blocked"]);
+const KNOWN_AGENT_IDS = new Set(AGENTS.map(a => a.id));
+
+const isValidBeadId = v => typeof v === "string" && BEAD_ID_RE.test(v);
+const isValidLabel = v => typeof v === "string" && LABEL_RE.test(v);
+const isValidPriority = v => {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 0 && n <= 4;
+};
+
 function ensureBeadsInit() {
   fs.mkdirSync(BEADS_DIR, { recursive: true });
   if (!fs.existsSync(path.join(BEADS_DIR, ".beads"))) {
-    const r = bd("init");
+    const r = bd(["init"]);
     if (!r.ok) { console.error("Beads init failed:", r.error); return false; }
     console.log("Beads initialized in", BEADS_DIR);
   }
@@ -393,14 +410,20 @@ app.post("/api/chat", requireAuth, async (req, res) => {
     const convoTokens = stmts.getConvoTokens.get(userId, agentId);
     const contextWindow = getContextWindow(model);
 
-    // Auto-create beads with agent label
+    // Auto-create beads with agent label.
+    // Title is extracted from model output that may have ingested untrusted
+    // email/calendar content — it must never be interpreted by a shell.
+    // The agentId is also pinned to a known agent before reaching the CLI.
     const beadsCreated = [];
+    const beadLabel = KNOWN_AGENT_IDS.has(agentId) ? agentId : null;
     const beadRe = /\[BEAD:\s*(.+?)\s*\|\s*priority:\s*(P[0-3])\s*\|\s*status:\s*(\w+)\]/gi;
     let m;
     while ((m = beadRe.exec(finalText)) !== null) {
       const title = m[1].trim();
       const pri = parseInt(m[2][1]);
-      const r = bd(`create "${title.replace(/"/g, '\\"')}" -p ${pri} -l ${agentId}`);
+      const args = ["create", title, "-p", String(pri)];
+      if (beadLabel) args.push("-l", beadLabel);
+      const r = bd(args);
       beadsCreated.push({ title, priority: m[2], status: m[3], bdResult: r.ok ? r.data : null });
     }
 
@@ -469,8 +492,8 @@ app.get("/api/usage", requireAuth, (req, res) => {
 
 /* ── Beads ── */
 app.get("/api/beads", requireAuth, (req, res) => {
-  let r = bd("list --all --json");
-  if (!r.ok) r = bd("list --all");
+  let r = bd(["list", "--all", "--json"]);
+  if (!r.ok) r = bd(["list", "--all"]);
   if (!r.ok) return res.json({ beads: [], error: r.error });
   let beads = [];
   if (Array.isArray(r.data)) beads = r.data;
@@ -479,54 +502,68 @@ app.get("/api/beads", requireAuth, (req, res) => {
 });
 
 app.get("/api/beads/ready", requireAuth, (req, res) => {
-  let r = bd("ready --json");
-  if (!r.ok) r = bd("ready");
+  let r = bd(["ready", "--json"]);
+  if (!r.ok) r = bd(["ready"]);
   res.json(r.ok ? { beads: Array.isArray(r.data) ? r.data : [] } : { beads: [] });
 });
 
 app.post("/api/beads", requireAuth, (req, res) => {
   const { title, priority, labels } = req.body;
-  if (!title) return res.status(400).json({ error: "title required" });
-  const args = [`create "${title.replace(/"/g, '\\"')}"`];
-  if (priority !== undefined) args.push(`-p ${priority}`);
-  if (labels) args.push(`-l ${labels}`);
-  const r = bd(args.join(" "));
+  if (typeof title !== "string" || !title.trim()) return res.status(400).json({ error: "title required" });
+  if (priority !== undefined && !isValidPriority(priority)) return res.status(400).json({ error: "priority must be an integer 0-4" });
+  if (labels !== undefined && !isValidLabel(labels)) return res.status(400).json({ error: "labels may only contain letters, digits, '.', '_', ',', '-'" });
+
+  const args = ["create", title];
+  if (priority !== undefined) args.push("-p", String(priority));
+  if (labels) args.push("-l", labels);
+  const r = bd(args);
   res.json(r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error });
 });
 
 app.patch("/api/beads/:id", requireAuth, (req, res) => {
+  if (!isValidBeadId(req.params.id)) return res.status(400).json({ error: "invalid bead id" });
   const { status, priority, title, claim, notes } = req.body;
-  const args = [`update ${req.params.id}`];
-  if (status) args.push(`--status ${status}`);
-  if (priority !== undefined) args.push(`-p ${priority}`);
-  if (title) args.push(`--title "${title.replace(/"/g, '\\"')}"`);
+  if (status !== undefined && !STATUS_VALUES.has(status)) return res.status(400).json({ error: "invalid status" });
+  if (priority !== undefined && !isValidPriority(priority)) return res.status(400).json({ error: "priority must be an integer 0-4" });
+  if (title !== undefined && typeof title !== "string") return res.status(400).json({ error: "title must be a string" });
+  if (notes !== undefined && typeof notes !== "string") return res.status(400).json({ error: "notes must be a string" });
+
+  const args = ["update", req.params.id];
+  if (status) args.push("--status", status);
+  if (priority !== undefined) args.push("-p", String(priority));
+  if (title) args.push("--title", title);
   if (claim) args.push("--claim");
-  if (notes) args.push(`--notes "${notes.replace(/"/g, '\\"')}"`);
-  const r = bd(args.join(" "));
+  if (notes) args.push("--notes", notes);
+  const r = bd(args);
   res.json(r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error });
 });
 
 app.post("/api/beads/:id/label", requireAuth, (req, res) => {
+  if (!isValidBeadId(req.params.id)) return res.status(400).json({ error: "invalid bead id" });
   const { label } = req.body;
-  if (!label) return res.status(400).json({ error: "label required" });
-  const r = bd(`label add ${req.params.id} ${label}`);
+  if (!isValidLabel(label)) return res.status(400).json({ error: "label may only contain letters, digits, '.', '_', ',', '-'" });
+  const r = bd(["label", "add", req.params.id, label]);
   res.json(r.ok ? { ok: true } : { ok: false, error: r.error });
 });
 
 app.delete("/api/beads/:id/label/:label", requireAuth, (req, res) => {
-  const r = bd(`label remove ${req.params.id} ${req.params.label}`);
+  if (!isValidBeadId(req.params.id)) return res.status(400).json({ error: "invalid bead id" });
+  if (!isValidLabel(req.params.label)) return res.status(400).json({ error: "invalid label" });
+  const r = bd(["label", "remove", req.params.id, req.params.label]);
   res.json(r.ok ? { ok: true } : { ok: false, error: r.error });
 });
 
 app.post("/api/beads/:id/dep", requireAuth, (req, res) => {
+  if (!isValidBeadId(req.params.id)) return res.status(400).json({ error: "invalid bead id" });
   const { dependsOn } = req.body;
-  if (!dependsOn) return res.status(400).json({ error: "dependsOn required" });
-  const r = bd(`dep add ${req.params.id} ${dependsOn}`);
+  if (!isValidBeadId(dependsOn)) return res.status(400).json({ error: "dependsOn must be a valid bead id" });
+  const r = bd(["dep", "add", req.params.id, dependsOn]);
   res.json(r.ok ? { ok: true } : { ok: false, error: r.error });
 });
 
 app.delete("/api/beads/:id/dep/:depId", requireAuth, (req, res) => {
-  const r = bd(`dep remove ${req.params.id} ${req.params.depId}`);
+  if (!isValidBeadId(req.params.id) || !isValidBeadId(req.params.depId)) return res.status(400).json({ error: "invalid bead id" });
+  const r = bd(["dep", "remove", req.params.id, req.params.depId]);
   res.json(r.ok ? { ok: true } : { ok: false, error: r.error });
 });
 
