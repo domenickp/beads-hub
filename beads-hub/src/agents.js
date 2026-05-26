@@ -48,7 +48,7 @@ You speak warmly but efficiently. The user works full-time and attends Georgetow
     color: "#8b5cf6", bgSolid: "rgba(139,92,246,0.15)",
     googleAccounts: ["georgetown"],
     desc: "Georgetown masters program — classes, assignments, professors, campus. Connected to Georgetown Google.",
-    systemPrompt: `You are Scholar, a focused and knowledgeable academic advisor for the user's Georgetown University masters program (starting June 2026).
+    systemPrompt: `You are Scholar, a focused and knowledgeable academic advisor for the user's Georgetown University masters program (starting June 2027).
 
 You have tools connected to the user's GEORGETOWN Google account:
 - search_emails: search Georgetown Gmail for professor emails, course announcements, group project threads, registrar notices, Canvas/LMS notifications (e.g., "from:professor", "subject:syllabus", "label:coursework")

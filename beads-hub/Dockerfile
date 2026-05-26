@@ -33,7 +33,7 @@ RUN npm install --omit=dev
 # Copy built frontend and server
 COPY --from=builder /app/dist ./dist
 COPY server.js ./
-COPY src/agents.js ./src/
+COPY src/agents.js src/google.js ./src/
 
 # Entrypoint: decrypt secrets if .env.enc exists, then start
 COPY scripts/entrypoint.sh /entrypoint.sh

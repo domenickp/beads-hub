@@ -4,19 +4,19 @@ services:
     container_name: beads-hub
     ports:
       - "${PORT:-3000}:3000"
-    volumes:
-      # Persistent data (survives container rebuilds)
-      - hub-data:/data
-      # Beads project directory (Dolt database)
-      - beads-project:/data/beads-project
-      # Secrets (age key for SOPS decryption)
-      - ./secrets:/secrets:ro
+    env_file: .env
     environment:
-      - NODE_ENV=production
-      - DB_PATH=/data/hub.db
-      - BEADS_PROJECT_DIR=/data/beads-project
+      # These override values from .env so the same file works on the host
+      # (Windows/Mac dev paths) and inside the container.
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+      DB_PATH: /app/data/hub.db
+      BEADS_PROJECT_DIR: /app/data/beads-project
+    volumes:
+      # SQLite DB, Google OAuth tokens, and the beads (Dolt) project all
+      # live under ./data on the host — survives `docker compose down`.
+      - ./data:/app/data
+      # For SOPS/age production mode, uncomment and provide ./secrets:
+      # - ./secrets:/secrets:ro
     restart: unless-stopped
-
-volumes:
-  hub-data:
-  beads-project:
