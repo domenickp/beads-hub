@@ -323,6 +323,12 @@ docker compose up -d --build
 
 # View logs
 docker compose logs -f
+
+cd ~/Documents/git/beads-hub/beads-hub
+docker compose logs -f     # tail
+docker compose restart     # restart after a change
+docker compose down        # stop (your ./data persists)
+docker compose up -d --build   # rebuild after editing server.js / src/
 ```
 
 The `docker-compose.yml` mounts volumes for persistent data and reads secrets from `./secrets/`.
